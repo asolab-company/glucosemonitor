@@ -178,7 +178,7 @@ struct SettingsView: View {
         .overlay {
             if isPickerPresented {
                 ZStack {
-                    VisualEffectBlur(blurStyle: .systemUltraThinMaterial)
+                    VisualEffectBlur(blurStyle: .light)
                         .ignoresSafeArea()
                     Color.black.opacity(0.10)
                         .ignoresSafeArea()
