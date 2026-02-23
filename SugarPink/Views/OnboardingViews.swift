@@ -139,7 +139,7 @@ struct OnboardingView: View {
 
             if isPickerPresented {
                 ZStack {
-                    VisualEffectBlur(blurStyle: .systemUltraThinMaterial)
+                    VisualEffectBlur(blurStyle: .light)
                         .ignoresSafeArea()
 
                     Color.black.opacity(0.10)
