@@ -81,7 +81,7 @@ struct HistoryView: View {
         ZStack (alignment: .top){
             bg.ignoresSafeArea()
             VStack(spacing: 0) {
-                Color.clear.frame(height: 20)
+                Color.clear.frame(height: 50)
                 historyContentBody
             }
             ZStack(alignment: .bottom) {
@@ -245,6 +245,7 @@ private struct HistoryContent: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .scrollIndicators(.hidden)
         .padding(.top, 10)
         .padding(.bottom, 50)
     }
