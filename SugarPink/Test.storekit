@@ -57,7 +57,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "weekly",
+          "productID" : "weeklyglucosepremium",
           "recurringSubscriptionPeriod" : "P1W",
           "referenceName" : "Week",
           "subscriptionGroupID" : "6C27E620",
@@ -85,7 +85,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "monthly",
+          "productID" : "monthlyglucosepremium",
           "recurringSubscriptionPeriod" : "P1M",
           "referenceName" : "Month",
           "subscriptionGroupID" : "6C27E620",
@@ -113,7 +113,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "yearly",
+          "productID" : "yearlyglucosepremium",
           "recurringSubscriptionPeriod" : "P1Y",
           "referenceName" : "Year",
           "subscriptionGroupID" : "6C27E620",
