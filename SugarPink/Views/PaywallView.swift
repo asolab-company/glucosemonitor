@@ -76,6 +76,7 @@ struct PaywallView: View {
                             }
                             .padding(.horizontal, 24)
                         }
+
                         if (!DeviceSize.isSmall){
                             Spacer()
                         }
@@ -179,6 +180,7 @@ struct PaywallView: View {
             }
         }
     }
+
 }
 
 struct PaywallOptionRow: View {
@@ -266,18 +268,27 @@ struct PaywallOptionRow: View {
     }
 
     private func periodLabel(for product: Product) -> String {
-        guard let subscription = product.subscription else { return "" }
-        switch subscription.subscriptionPeriod.unit {
-        case .day:
-            return "day"
-        case .week:
+        switch product.id {
+        case AppConstants.Subscription.weeklyID:
             return "week"
-        case .month:
+        case AppConstants.Subscription.monthlyID:
             return "month"
-        case .year:
+        case AppConstants.Subscription.yearlyID:
             return "year"
-        @unknown default:
-            return ""
+        default:
+            guard let subscription = product.subscription else { return "" }
+            switch subscription.subscriptionPeriod.unit {
+            case .day:
+                return "day"
+            case .week:
+                return "week"
+            case .month:
+                return "month"
+            case .year:
+                return "year"
+            @unknown default:
+                return ""
+            }
         }
     }
 
