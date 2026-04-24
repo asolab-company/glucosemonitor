@@ -75,19 +75,8 @@ struct MainView: View {
         .animation(.spring(response: 0.28, dampingFraction: 0.86), value: isAddPresented)
         .fullScreenCover(isPresented: $showPaywall) {
             PaywallView(
-                onSubscribe: { productId in
-                    Task {
-                        await SubscriptionManager.shared.purchase(productId: productId)
-                        await MainActor.run { showPaywall = false }
-                    }
-                },
-                onSkip: { showPaywall = false },
-                onRestore: {
-                    Task {
-                        await SubscriptionManager.shared.restorePurchases()
-                        try? await AppStore.sync()
-                    }
-                }
+                onClose: { showPaywall = false },
+                onUnlocked: { showPaywall = false }
             )
         }
     }

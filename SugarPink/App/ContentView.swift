@@ -7,52 +7,36 @@ enum AppStage {
     case main
 }
 
-private let hasReachedMainKey = "sugarpink.hasReachedMain"
-
 struct ContentView: View {
-    @State private var stage: AppStage = Self.initialStage
-
-    private static var initialStage: AppStage {
-        UserDefaults.standard.bool(forKey: hasReachedMainKey) ? .main : .splash
-    }
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+    @ObservedObject private var subscriptionManager = SubscriptionManager.shared
+    @State private var stage: AppStage = .splash
+    @State private var didFinishSplash = false
 
     var body: some View {
         Group {
             switch stage {
             case .splash:
                 SplashView {
-                    withAnimation {
-                        stage = .onboarding
-                    }
+                    Task { await finishSplash() }
                 }
             case .onboarding:
                 OnboardingView {
+                    hasCompletedOnboarding = true
                     withAnimation {
                         stage = .paywall
                     }
                 }
             case .paywall:
                 PaywallView(
-                    onSubscribe: { productId in
-                        Task {
-                            await SubscriptionManager.shared.purchase(productId: productId)
-                            await MainActor.run {
-                                UserDefaults.standard.set(true, forKey: hasReachedMainKey)
-                                withAnimation {
-                                    stage = .main
-                                }
-                            }
-                        }
-                    },
-                    onSkip: {
-                        UserDefaults.standard.set(true, forKey: hasReachedMainKey)
+                    onClose: {
                         withAnimation {
                             stage = .main
                         }
                     },
-                    onRestore: {
-                        Task {
-                            await SubscriptionManager.shared.restorePurchases()
+                    onUnlocked: {
+                        withAnimation {
+                            stage = .main
                         }
                     }
                 )
@@ -61,10 +45,36 @@ struct ContentView: View {
             }
         }
         .preferredColorScheme(.light)
+        .onAppear {
+            AppsFlyerService.shared.startRespectingTrackingAuthorization()
+        }
+        .onChange(of: subscriptionManager.isPremiumUnlocked) { _, isUnlocked in
+            guard isUnlocked, didFinishSplash else { return }
+            withAnimation {
+                stage = .main
+            }
+        }
+    }
+
+    @MainActor
+    private func finishSplash() async {
+        guard !didFinishSplash else { return }
+        didFinishSplash = true
+
+        await subscriptionManager.refreshSubscriptionStatus()
+
+        withAnimation {
+            if subscriptionManager.isPremiumUnlocked {
+                stage = .main
+            } else if hasCompletedOnboarding {
+                stage = .paywall
+            } else {
+                stage = .onboarding
+            }
+        }
     }
 }
 
 #Preview {
     ContentView()
 }
-

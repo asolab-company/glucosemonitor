@@ -2,16 +2,117 @@ import SwiftUI
 import StoreKit
 
 struct PaywallView: View {
+    let onClose: () -> Void
+    let onUnlocked: () -> Void
+
+    @State private var phase: Phase = .loading
+    @State private var showRemoteLoadingOverlay = false
+    @State private var remoteLoadingStartedAt: Date?
+    @State private var didLoadRemoteConfig = false
+
+    private static let minimumRemoteLoadingDuration: TimeInterval = 1.2
+
+    private enum Phase: Equatable {
+        case loading
+        case remote(URL)
+        case native
+    }
+
+    var body: some View {
+        Group {
+            switch phase {
+            case .loading:
+                loadingView
+
+            case .remote(let url):
+                ZStack {
+                    SugarPinkRemotePaywallView(
+                        url: url,
+                        onPaymentSuccess: handleRemotePaymentSuccess,
+                        onInitialPageReady: handleInitialRemotePageReady
+                    )
+                    .ignoresSafeArea()
+
+                    if showRemoteLoadingOverlay {
+                        RemotePaywallLoadingOverlay()
+                            .transition(.opacity)
+                    }
+                }
+
+            case .native:
+                NativePaywallView(
+                    onClose: onClose,
+                    onUnlocked: onUnlocked
+                )
+            }
+        }
+        .task {
+            await loadRemoteConfigIfNeeded()
+        }
+    }
+
+    private var loadingView: some View {
+        PaywallLoadingSpinnerView()
+    }
+
+    @MainActor
+    private func loadRemoteConfigIfNeeded() async {
+        guard !didLoadRemoteConfig else { return }
+        didLoadRemoteConfig = true
+
+        if let url = await SugarPinkStartupRemoteConfig.fetchWebURL() {
+            remoteLoadingStartedAt = Date()
+            showRemoteLoadingOverlay = true
+            phase = .remote(url)
+            return
+        }
+
+        phase = .native
+    }
+
+    @MainActor
+    private func handleRemotePaymentSuccess() {
+        AppsFlyerService.shared.trackRemoteSubscriptionSuccess()
+        SubscriptionManager.shared.unlockPremiumFromWebCheckout()
+        showRemoteLoadingOverlay = false
+        remoteLoadingStartedAt = nil
+        onUnlocked()
+    }
+
+    @MainActor
+    private func handleInitialRemotePageReady() {
+        let startedAt = remoteLoadingStartedAt
+
+        Task {
+            if let startedAt {
+                let elapsed = Date().timeIntervalSince(startedAt)
+                let remaining = max(0, Self.minimumRemoteLoadingDuration - elapsed)
+                if remaining > 0 {
+                    try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
+                }
+            }
+
+            await MainActor.run {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    showRemoteLoadingOverlay = false
+                }
+                remoteLoadingStartedAt = nil
+            }
+        }
+    }
+}
+
+private struct NativePaywallView: View {
     @Environment(\.openURL) private var openURL
+    @ObservedObject private var subscriptionManager = SubscriptionManager.shared
     @State private var products: [Product] = []
     @State private var selectedProductID: String?
     @State private var isLoading: Bool = true
     @State private var errorMessage: String?
-    
-    var onSubscribe: (String) -> Void = { _ in }
-    var onSkip: () -> Void = {}
-    var onRestore: () -> Void = {}
-    
+
+    let onClose: () -> Void
+    let onUnlocked: () -> Void
+
     var body: some View {
         ZStack(alignment: .top) {
             Color(hex: "#F3F3F3")
@@ -93,11 +194,7 @@ struct PaywallView: View {
                     }
           
                 
-                Button {
-                    if let id = selectedProductID {
-                        onSubscribe(id)
-                    }
-                } label: {
+                Button(action: purchaseSelected) {
                     Text("Continue")
                         .font(.headline)
                         .foregroundColor(.white)
@@ -119,20 +216,17 @@ struct PaywallView: View {
                             openURL(url)
                         }
                     }
-                    
+
                     Spacer()
-                    
-                    Button("Skip") { onSkip() }
-                    
+
+                    Button("Skip", action: onClose)
+
                     Spacer()
-                    
-                    Button("Restore") {
-                        onRestore()
-                        Task { try? await AppStore.sync() }
-                    }
-                    
+
+                    Button("Restore", action: restorePurchases)
+
                     Spacer()
-                    
+
                     Button("Terms of Use") {
                         if let url = URL(string: AppConstants.Links.termsOfUse) {
                             openURL(url)
@@ -149,8 +243,13 @@ struct PaywallView: View {
         .task {
             await loadProducts()
         }
+        .onChange(of: subscriptionManager.errorText) { _, newValue in
+            if let newValue, !newValue.isEmpty {
+                errorMessage = newValue
+            }
+        }
     }
-    
+
     private func loadProducts() async {
         do {
             isLoading = true
@@ -181,6 +280,53 @@ struct PaywallView: View {
         }
     }
 
+    private func purchaseSelected() {
+        guard let selectedProductID else { return }
+
+        Task {
+            let isUnlocked = await subscriptionManager.purchase(productId: selectedProductID)
+            await MainActor.run {
+                if isUnlocked {
+                    onUnlocked()
+                } else if errorMessage == nil || errorMessage?.isEmpty == true {
+                    errorMessage = subscriptionManager.errorText
+                }
+            }
+        }
+    }
+
+    private func restorePurchases() {
+        Task {
+            let restored = await subscriptionManager.restorePurchases()
+            await MainActor.run {
+                if restored {
+                    onUnlocked()
+                } else if errorMessage == nil || errorMessage?.isEmpty == true {
+                    errorMessage = subscriptionManager.errorText
+                }
+            }
+        }
+    }
+}
+
+private struct RemotePaywallLoadingOverlay: View {
+    var body: some View {
+        PaywallLoadingSpinnerView()
+    }
+}
+
+private struct PaywallLoadingSpinnerView: View {
+    var body: some View {
+        ZStack {
+            Color(hex: "#F3F3F3")
+                .ignoresSafeArea()
+
+            ProgressView()
+                .progressViewStyle(.circular)
+                .tint(Color(hex: "FB2651"))
+                .scaleEffect(1.1)
+        }
+    }
 }
 
 struct PaywallOptionRow: View {
@@ -300,5 +446,5 @@ struct PaywallOptionRow: View {
 }
 
 #Preview("Paywall") {
-    PaywallView()
+    PaywallView(onClose: {}, onUnlocked: {})
 }
